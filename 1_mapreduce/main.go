@@ -7,6 +7,7 @@ import (
 	"os"
 	"plugin"
 	"sort"
+	"sync"
 
 	"distributed-systems/1_mapreduce/types"
 )
@@ -19,20 +20,34 @@ func main() {
 
 	mapf, reducef := loadMapReducePlugin(os.Args[1])
 
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
 	intermediate := []types.KeyValue{}
 	for _, filePath := range os.Args[2:] {
-		file, err := os.Open(filePath)
-		if err != nil {
-			log.Fatal(err)
-		}
-		content, err := io.ReadAll(file)
-		if err != nil {
-			log.Fatal(err)
-		}
-		file.Close()
-		keyValues := mapf(string(content))
-		intermediate = append(intermediate, keyValues...)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			file, err := os.Open(filePath)
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer file.Close()
+
+			content, err := io.ReadAll(file)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			keyValues := mapf(string(content))
+
+			mu.Lock()
+			intermediate = append(intermediate, keyValues...)
+			mu.Unlock()
+		}()
 	}
+
+	wg.Wait()
 
 	log.Println("total length", len(intermediate))
 	sort.Sort(types.ByKey(intermediate))
