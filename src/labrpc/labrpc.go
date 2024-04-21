@@ -10,7 +10,7 @@ package labrpc
 // so, while you can modify this code to help you debug, please
 // test against the original before submitting.
 //
-// adapted from Go net/rpc/server.go.
+// adapted from Go net/rpc/main.go.
 //
 // sends labgob-encoded values to ensure that RPCs
 // don't include references to program objects.
