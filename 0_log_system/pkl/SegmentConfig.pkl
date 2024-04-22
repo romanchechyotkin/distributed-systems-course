@@ -3,7 +3,8 @@ module SegmentCofig
 
 import "package://pkg.pkl-lang.org/pkl-go/pkl.golang@0.6.0#/go.pkl"
 
+typealias byteValue = UInt32(this > 0)
 
-typealias maxIndex = UInt16(this > 0)
-
-maxIndexBytes: maxIndex
+maxIndexBytes: byteValue
+maxStoreBytes: byteValue
+initialOffset: byteValue

@@ -8,7 +8,11 @@ import (
 )
 
 type SegmentCofig struct {
-	MaxIndexBytes uint16 `pkl:"maxIndexBytes"`
+	MaxIndexBytes uint32 `pkl:"maxIndexBytes"`
+
+	MaxStoreBytes uint32 `pkl:"maxStoreBytes"`
+
+	InitialOffset uint32 `pkl:"initialOffset"`
 }
 
 // LoadFromPath loads the pkl module at the given path and evaluates it into a SegmentCofig

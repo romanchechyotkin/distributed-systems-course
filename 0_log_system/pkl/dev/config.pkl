@@ -3,5 +3,7 @@ amends ".../AppConfig.pkl"
 port = 8000
 
 segment {
-  maxIndexBytes = 256
+  maxIndexBytes = 1024
+  maxStoreBytes = 1024
+  initialOffset = 1024
 }
