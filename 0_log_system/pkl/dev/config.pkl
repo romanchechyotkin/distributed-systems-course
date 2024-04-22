@@ -1,0 +1,7 @@
+amends ".../AppConfig.pkl"
+
+port = 8000
+
+segment {
+  maxIndexBytes = 256
+}
