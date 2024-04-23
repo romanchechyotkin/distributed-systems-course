@@ -93,8 +93,8 @@ func (l *Log) Append(record *pb.Record) (uint64, error) {
 }
 
 func (l *Log) Read(off uint64) (*pb.Record, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
 	var s *segment
 
