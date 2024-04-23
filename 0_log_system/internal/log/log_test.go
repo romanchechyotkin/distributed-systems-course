@@ -31,7 +31,7 @@ func TestLog(t *testing.T) {
 				Segment: &segmentconfig.SegmentCofig{
 					MaxIndexBytes: 32,
 					MaxStoreBytes: 32,
-					InitialOffset: 32,
+					InitialOffset: 0,
 				},
 			}
 			log, err := New(dir, c)
@@ -68,6 +68,7 @@ func testInitExisting(t *testing.T, o *Log) {
 		_, err := o.Append(append)
 		require.NoError(t, err)
 	}
+
 	require.NoError(t, o.Close())
 	off, err := o.LowestOffset()
 	require.NoError(t, err)
@@ -75,6 +76,7 @@ func testInitExisting(t *testing.T, o *Log) {
 	off, err = o.HighestOffset()
 	require.NoError(t, err)
 	require.Equal(t, uint64(2), off)
+
 	n, err := New(o.Dir, o.Config)
 	require.NoError(t, err)
 	off, err = n.LowestOffset()
@@ -111,6 +113,6 @@ func testTruncate(t *testing.T, log *Log) {
 	}
 	err := log.Truncate(1)
 	require.NoError(t, err)
-	_, err = log.Read(0)
+	_, err = log.Read(3)
 	require.Error(t, err)
 }

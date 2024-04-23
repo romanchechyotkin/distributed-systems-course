@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 	"path"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -57,9 +57,7 @@ func (l *Log) setup() error {
 		baseOffsets = append(baseOffsets, off)
 	}
 
-	sort.Slice(baseOffsets, func(i, j int) bool {
-		return baseOffsets[i] < baseOffsets[j]
-	})
+	slices.Sort(baseOffsets)
 
 	for _, offset := range baseOffsets {
 		if err = l.newSegment(offset); err != nil {
