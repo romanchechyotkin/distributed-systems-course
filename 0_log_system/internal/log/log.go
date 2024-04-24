@@ -2,7 +2,6 @@ package log
 
 import (
 	"io"
-	"log_system/internal/server"
 	"os"
 	"path"
 	"slices"
@@ -12,6 +11,7 @@ import (
 
 	pb "log_system/api/v1"
 	"log_system/config/appconfig"
+	"log_system/internal/server"
 )
 
 type Log struct {
