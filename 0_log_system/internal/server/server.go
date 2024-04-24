@@ -3,11 +3,11 @@ package server
 import (
 	"context"
 	"fmt"
-	"google.golang.org/grpc"
 
 	api "log_system/api/v1"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 )
 
