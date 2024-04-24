@@ -1,8 +1,8 @@
 package log
 
 import (
-	"fmt"
 	"io"
+	"log_system/internal/server"
 	"os"
 	"path"
 	"slices"
@@ -104,7 +104,7 @@ func (l *Log) Read(off uint64) (*pb.Record, error) {
 	}
 
 	if s == nil || s.nextOffset <= off {
-		return nil, fmt.Errorf("offset out of range: %d", off)
+		return nil, server.ErrOffsetOutOfRange{Offset: off}
 	}
 
 	return s.Read(off)
