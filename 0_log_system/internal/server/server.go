@@ -2,39 +2,10 @@ package server
 
 import (
 	"context"
-	"fmt"
-
 	api "log_system/api/v1"
 
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/status"
 )
-
-type ErrOffsetOutOfRange struct {
-	Offset uint64
-}
-
-func (e ErrOffsetOutOfRange) GRPCStatus() *status.Status {
-	st := status.New(404, fmt.Sprintf("offset out of range: %d", e.Offset))
-	msg := fmt.Sprintf("The requested offset is outside the log's range: %d", e.Offset)
-
-	d := &errdetails.LocalizedMessage{
-		Locale:  "en-US",
-		Message: msg,
-	}
-
-	std, err := st.WithDetails(d)
-	if err != nil {
-		return st
-	}
-
-	return std
-}
-
-func (e ErrOffsetOutOfRange) Error() string {
-	return e.GRPCStatus().Err().Error()
-}
 
 type CommitLog interface {
 	Append(record *api.Record) (uint64, error)
@@ -116,7 +87,7 @@ func (srv *grpcServer) ConsumeStream(req *api.ConsumeRequest, stream api.Log_Con
 			resp, err := srv.Consume(stream.Context(), req)
 			switch err.(type) {
 			case nil:
-			case ErrOffsetOutOfRange:
+			case api.ErrOffsetOutOfRange:
 				continue
 			default:
 				return err

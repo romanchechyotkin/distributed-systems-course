@@ -11,7 +11,6 @@ import (
 
 	pb "log_system/api/v1"
 	"log_system/config/appconfig"
-	"log_system/internal/server"
 )
 
 type Log struct {
@@ -87,7 +86,7 @@ func (l *Log) Append(record *pb.Record) (uint64, error) {
 		err = l.newSegment(off + 1)
 	}
 
-	return 0, err
+	return off, err
 }
 
 func (l *Log) Read(off uint64) (*pb.Record, error) {
@@ -104,7 +103,7 @@ func (l *Log) Read(off uint64) (*pb.Record, error) {
 	}
 
 	if s == nil || s.nextOffset <= off {
-		return nil, server.ErrOffsetOutOfRange{Offset: off}
+		return nil, pb.ErrOffsetOutOfRange{Offset: off}
 	}
 
 	return s.Read(off)
