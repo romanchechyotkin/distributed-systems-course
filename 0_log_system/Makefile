@@ -24,10 +24,22 @@ cert:
 	cert/server-csr.json | cfssljson -bare server
 
 	cfssl gencert \
+	-ca=ca.pem \
+	-ca-key=ca-key.pem \
+	-config=cert/ca-config.json \
+	-profile=client \
+	-cn="root" \
+	cert/client-csr.json | cfssljson -bare root-client
+
+	cfssl gencert \
     -ca=ca.pem \
     -ca-key=ca-key.pem \
     -config=cert/ca-config.json \
     -profile=client \
-    cert/client-csr.json | cfssljson -bare client
+	-cn="nobody" \
+    cert/client-csr.json | cfssljson -bare nobody-client
+
+	cp cert/acl/model.conf ${CONFIG_PATH}/model.conf
+	cp cert/acl/policy.csv ${CONFIG_PATH}/policy.csv
 
 	mv *.pem *.csr ${CONFIG_PATH}

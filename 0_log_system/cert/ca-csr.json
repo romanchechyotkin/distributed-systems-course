@@ -1,16 +1,16 @@
 {
-  "CN": "My Awesome CA",
+  "CN": "romanchechyotkin",
   "key": {
     "algo": "rsa",
     "size": 2048
   },
   "names": [
     {
-      "C": "CA",
-      "L": "ON",
-      "ST": "Toronto",
-      "O": "My Awesome Company",
-      "OU": "CA Services"
+      "C": "BY",
+      "L": "Minsk",
+      "ST": "Minsk",
+      "O": "romanchechyotkin",
+      "OU": "ROOT CA"
     }
   ]
 }
