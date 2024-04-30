@@ -2,10 +2,9 @@ package log
 
 import (
 	"io/ioutil"
-	"log_system/internal/server"
 	"os"
 	"testing"
-
+	
 	api "log_system/api/v1"
 	"log_system/config/appconfig"
 	"log_system/config/segmentconfig"
@@ -57,7 +56,7 @@ func testAppendRead(t *testing.T, log *Log) {
 func testOutOfRangeErr(t *testing.T, log *Log) {
 	read, err := log.Read(1)
 	require.Nil(t, read)
-	apiErr := err.(server.ErrOffsetOutOfRange)
+	apiErr := err.(api.ErrOffsetOutOfRange)
 	require.Equal(t, uint64(1), apiErr.Offset)
 }
 
