@@ -43,5 +43,3 @@ cert:
 	cp cert/acl/policy.csv ${CONFIG_PATH}/policy.csv
 
 	mv *.pem *.csr ${CONFIG_PATH}
-
-	
