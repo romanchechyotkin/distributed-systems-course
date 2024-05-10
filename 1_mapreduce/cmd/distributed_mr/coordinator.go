@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"strconv"
 
-	"distributed-systems/1_mapreduce/cmd/distributed_mr/logger"
-	socket "distributed-systems/1_mapreduce/cmd/distributed_mr/rpc"
+	rpcArgs "distributed-systems/1_mapreduce/cmd/distributed_mr/rpc"
 )
 
 type Coordinator struct{}
@@ -18,10 +18,11 @@ func (c *Coordinator) serve() {
 	rpc.HandleHTTP()
 
 	//l, e := net.Listen("tcp", ":1234")
-	sockname := socket.CoordinatorSock()
-	os.Remove(sockname)
+	socketName := rpcArgs.CoordinatorSock()
+	log.Println("coordinator socket:", socketName)
+	os.Remove(socketName)
 
-	l, e := net.Listen("unix", sockname)
+	l, e := net.Listen("unix", socketName)
 	if e != nil {
 		log.Fatal("listen error:", e)
 	}
@@ -29,7 +30,9 @@ func (c *Coordinator) serve() {
 	http.Serve(l, nil)
 }
 
-func newCoordinator(files []string, nReduce int) *Coordinator {
+// The map phase should divide the intermediate keys into buckets for nReduce reduce tasks, where nReduce is the number of reduce tasks
+// Each mapper should create nReduce intermediate files for consumption by the reduce tasks.
+func newCoordinator(files []string, nReduce int64) *Coordinator {
 	coordinator := &Coordinator{}
 
 	// todo
@@ -38,17 +41,40 @@ func newCoordinator(files []string, nReduce int) *Coordinator {
 	return coordinator
 }
 
-type Request struct{}
+func (c *Coordinator) Handshake(req *rpcArgs.HandshakeRequest, res *rpcArgs.HandshakeResponse) error {
+	log.Println("[coordinator]: handshake; worker:", req.WorkerName)
 
-type Response struct{}
-
-func (c *Coordinator) Log(req *Request, res *Response) error {
+	res.X = req.X + req.Y
 	return nil
 }
 
-func main() {
-	log := logger.New()
-	log.Info("coordinator started")
+func (c *Coordinator) GiveTask(req *rpcArgs.GiveTaskRequest, res *rpcArgs.GiveTaskResponse) error {
+	log.Println("[coordinator]: give task; worker:", req.WorkerName)
 
-	_ = newCoordinator(nil, 0)
+	//res.WorkerName = req.WorkerName
+	//res.Map = true
+	//res.Reduce = false
+
+	return nil
+}
+
+func (c *Coordinator) Map() {}
+
+func (c *Coordinator) Reduce() {}
+
+func main() {
+	log.Println("coordinator started")
+
+	if len(os.Args) < 2 {
+		log.Println("usage: coordinator <files...> <reduce num>")
+		os.Exit(1)
+	}
+
+	reduceNumber := os.Args[len(os.Args)-1]
+	nReduce, err := strconv.ParseInt(reduceNumber, 10, 64)
+	if err != nil {
+		log.Fatal("last argument must be a number of reduce tasks")
+	}
+
+	_ = newCoordinator(os.Args[1:len(os.Args)-1], nReduce)
 }
