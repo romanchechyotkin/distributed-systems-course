@@ -7,11 +7,19 @@ import (
 	"net/rpc"
 	"os"
 	"strconv"
+	"sync"
 
 	rpcArgs "distributed-systems/1_mapreduce/cmd/distributed_mr/rpc"
 )
 
-type Coordinator struct{}
+type Coordinator struct {
+	inputFiles        []string
+	intermediateFiles []string
+	outputFiles       []string
+	nReduce           int64
+
+	mu sync.Mutex
+}
 
 func (c *Coordinator) serve() {
 	rpc.Register(c)
@@ -33,7 +41,10 @@ func (c *Coordinator) serve() {
 // The map phase should divide the intermediate keys into buckets for nReduce reduce tasks, where nReduce is the number of reduce tasks
 // Each mapper should create nReduce intermediate files for consumption by the reduce tasks.
 func newCoordinator(files []string, nReduce int64) *Coordinator {
-	coordinator := &Coordinator{}
+	coordinator := &Coordinator{
+		inputFiles: files,
+		nReduce:    nReduce,
+	}
 
 	// todo
 
@@ -51,9 +62,12 @@ func (c *Coordinator) Handshake(req *rpcArgs.HandshakeRequest, res *rpcArgs.Hand
 func (c *Coordinator) GiveTask(req *rpcArgs.GiveTaskRequest, res *rpcArgs.GiveTaskResponse) error {
 	log.Println("[coordinator]: give task; worker:", req.WorkerName)
 
-	//res.WorkerName = req.WorkerName
-	//res.Map = true
-	//res.Reduce = false
+	if len(c.inputFiles) > 0 {
+		res.WorkerName = req.WorkerName
+		res.Map = true
+		res.Reduce = false
+		res.Files = c.inputFiles
+	}
 
 	return nil
 }

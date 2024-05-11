@@ -73,9 +73,40 @@ func (w *worker) process() {
 	for {
 		select {
 		case <-ticker.C:
-			w.requestCoordinator()
+			res, err := w.requestCoordinator()
+			if err != nil {
+				log.Println(err)
+			}
+
+			if res.Map {
+				w.processMap(res.Files...)
+			}
+
+			if res.Reduce {
+				w.processReduce()
+			}
+
+			log.Println(res)
+
 		}
 	}
+}
+
+func (w *worker) processMap(files ...string) {
+	for _, file := range files {
+		content, err := os.ReadFile(file)
+		if err != nil {
+			return
+		}
+
+		kva := w.mapf(string(content))
+		log.Println(kva)
+	}
+
+}
+
+func (w *worker) processReduce() {
+
 }
 
 func (w *worker) handshake() {
@@ -107,7 +138,7 @@ func (w *worker) handshake() {
 	log.Printf("Coordinator.Handshake succeeded")
 }
 
-func (w *worker) requestCoordinator() {
+func (w *worker) requestCoordinator() (*rpcArgs.GiveTaskResponse, error) {
 	args := rpcArgs.GiveTaskRequest{}
 
 	// fill in the argument(s).
@@ -123,10 +154,11 @@ func (w *worker) requestCoordinator() {
 	err := call("Coordinator.GiveTask", &args, &reply)
 	if err != nil {
 		log.Println("Coordinator.GiveTask failed")
-		os.Exit(1)
+		return nil, err
 	}
 
 	log.Printf("Coordinator.GiveTask succeeded")
+	return &reply, nil
 }
 
 // call send an RPC request to the coordinator, wait for the response.

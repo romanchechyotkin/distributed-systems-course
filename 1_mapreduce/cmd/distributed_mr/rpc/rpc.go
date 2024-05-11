@@ -26,7 +26,8 @@ type GiveTaskRequest struct {
 }
 
 type GiveTaskResponse struct {
-	//WorkerName string
-	//Map        bool
-	//Reduce     bool
+	WorkerName string
+	Map        bool
+	Reduce     bool
+	Files      []string
 }
