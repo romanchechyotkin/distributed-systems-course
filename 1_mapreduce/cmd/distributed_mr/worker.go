@@ -1,17 +1,25 @@
 package main
 
 import (
+	"hash/fnv"
 	"log"
-	"math/rand"
+	"log/slog"
 	"net/rpc"
 	"os"
-	"plugin"
-	"sync"
-	"time"
 
+	"distributed-systems/1_mapreduce/cmd/distributed_mr/logger"
 	rpcArgs "distributed-systems/1_mapreduce/cmd/distributed_mr/rpc"
+	"distributed-systems/1_mapreduce/cmd/distributed_mr/utils"
 	"distributed-systems/1_mapreduce/types"
 )
+
+// use ihash(key) % NReduce to choose the reduce
+// task number for each KeyValue emitted by Map.
+func ihash(key string) int64 {
+	h := fnv.New32a()
+	h.Write([]byte(key))
+	return int64(h.Sum32() & 0x7fffffff)
+}
 
 // Your job is to implement a distributed MapReduce, consisting of two programs, the coordinator and the worker.
 // There will be just one coordinator process, and one or more worker processes executing in parallel.
@@ -24,84 +32,37 @@ import (
 // The coordinator should notice if a worker hasn't completed its task in a reasonable amount of time (for this lab, use ten seconds), and give the same task to a different worker.
 
 type worker struct {
+	log     *slog.Logger
 	name    string
 	mapf    func(string) []types.KeyValue
 	reducef func(string, []string) string
-
-	wg sync.WaitGroup
 }
 
-func randomWorkerName() string {
-	rand.New(rand.NewSource(time.Now().UnixNano()))
+func newWorker(log *slog.Logger, mapF func(content string) []types.KeyValue, reduceF func(key string, values []string) string) *worker {
+	workerName := utils.WorkerName()
+	log = log.With(slog.String("worker name", workerName))
 
-	letter := "abcdefghijklmnopqrstuvwxyz"
-	var idx int
-	var res string
-
-	for len(res) != 10 {
-		idx = rand.Intn(26)
-		if idx == 0 {
-			continue
-		}
-
-		res += string(letter[idx])
-	}
-
-	return res
-}
-
-func newWorker(mapF func(content string) []types.KeyValue, reduceF func(key string, values []string) string) *worker {
 	w := &worker{
-		name:    randomWorkerName(),
+		log:     log,
+		name:    workerName,
 		mapf:    mapF,
 		reducef: reduceF,
 	}
 
-	w.handshake()
+	w.log.Debug("worker")
 
-	w.wg.Add(1)
-	go w.process()
+	w.handshake()
 
 	return w
 }
 
 func (w *worker) process() {
-	defer w.wg.Done()
-
-	ticker := time.NewTicker(10 * time.Second)
-
 	for {
-		select {
-		case <-ticker.C:
-			res, err := w.requestCoordinator()
-			if err != nil {
-				log.Println(err)
-			}
-
-			if res.Map {
-				w.processMap(res.Files...)
-			}
-
-			if res.Reduce {
-				w.processReduce()
-			}
-
-			log.Println(res)
-
-		}
+		log.Println("question")
 	}
 }
 
-func (w *worker) processMap(files ...string) {
-	for _, file := range files {
-		content, err := os.ReadFile(file)
-		if err != nil {
-			return
-		}
-
-		kva := w.mapf(string(content))
-		log.Println(kva)
-	}
+func (w *worker) processMap(nReduce int64, files ...string) {
 
 }
 
@@ -110,48 +71,38 @@ func (w *worker) processReduce() {
 }
 
 func (w *worker) handshake() {
+	w.log.Info("handshake request")
+
 	args := rpcArgs.HandshakeRequest{}
 
-	// fill in the argument(s).
 	args.X = 1
 	args.Y = 1
 	args.WorkerName = w.name
 
-	// declare a reply structure.
 	reply := rpcArgs.HandshakeResponse{}
 
-	// send the RPC request, wait for the reply.
-	// the "Coordinator.Example" tells the
-	// receiving server that we'd like to call
-	// the Example() method of struct Coordinator.
-	err := call("Coordinator.Handshake", &args, &reply)
+	err := w.call("Coordinator.Handshake", &args, &reply)
 	if err != nil {
-		log.Println("Coordinator.Handshake failed")
+		w.log.Error("Coordinator.Handshake failed", slog.Any("error", err))
 		os.Exit(1)
 	}
 
 	if reply.X != args.X+args.Y {
-		log.Println("Coordinator.Handshake failed")
+		w.log.Error("Coordinator.Handshake failed", slog.Any("error", err))
 		os.Exit(1)
 	}
 
-	log.Printf("Coordinator.Handshake succeeded")
+	w.log.Info("Coordinator.Handshake succeeded")
 }
 
 func (w *worker) requestCoordinator() (*rpcArgs.GiveTaskResponse, error) {
 	args := rpcArgs.GiveTaskRequest{}
 
-	// fill in the argument(s).
 	args.WorkerName = w.name
 
-	// declare a reply structure.
 	reply := rpcArgs.GiveTaskResponse{}
 
-	// send the RPC request, wait for the reply.
-	// the "Coordinator.Example" tells the
-	// receiving server that we'd like to call
-	// the Example() method of struct Coordinator.
-	err := call("Coordinator.GiveTask", &args, &reply)
+	err := w.call("Coordinator.GiveTask", &args, &reply)
 	if err != nil {
 		log.Println("Coordinator.GiveTask failed")
 		return nil, err
@@ -164,20 +115,21 @@ func (w *worker) requestCoordinator() (*rpcArgs.GiveTaskResponse, error) {
 // call send an RPC request to the coordinator, wait for the response.
 // usually returns true.
 // returns false if something goes wrong.
-func call(rpcName string, args any, reply any) error {
+func (w *worker) call(rpcName string, args any, reply any) error {
 	// c, err := rpc.DialHTTP("tcp", "127.0.0.1"+":1234")
 	socketName := rpcArgs.CoordinatorSock()
-	log.Printf("coordinator socket: %s\n", socketName)
+	w.log.Debug("coordinator socket", slog.String("socket", socketName))
 
 	c, err := rpc.DialHTTP("unix", socketName)
 	if err != nil {
-		log.Fatal("dialing:", err)
+		w.log.Error("failed to dial rpc server rpc", slog.Any("error", err))
+		return err
 	}
 	defer c.Close()
 
 	err = c.Call(rpcName, args, reply)
 	if err != nil {
-		log.Println(err)
+		w.log.Error("failed to call rpc", slog.Any("error", err))
 		return err
 	}
 
@@ -185,44 +137,16 @@ func call(rpcName string, args any, reply any) error {
 }
 
 func main() {
+	log := logger.New()
+
 	if len(os.Args) != 2 {
-		log.Println("usage: worker <wc plugin path>")
+		log.Error("usage: worker <wc plugin path>")
 		os.Exit(1)
 	}
 
-	mapf, reducef := loadPlugin(os.Args[1])
+	mapf, reducef := utils.LoadPlugin(os.Args[1])
 
-	w := newWorker(mapf, reducef)
-	log.Printf("worker %s started\n", w.name)
-
-	w.wg.Wait()
-}
-
-func loadPlugin(path string) (func(content string) []types.KeyValue, func(key string, values []string) string) {
-	plugin, err := plugin.Open(path)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	mapF, err := plugin.Lookup("Map")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	mapFunc, ok := mapF.(func(content string) []types.KeyValue)
-	if !ok {
-		log.Fatal("no func map")
-	}
-
-	reduceF, err := plugin.Lookup("Reduce")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	reduceFunc, ok := reduceF.(func(key string, values []string) string)
-	if !ok {
-		log.Fatal("no func reduce")
-	}
-
-	return mapFunc, reduceFunc
+	w := newWorker(log, mapf, reducef)
+	w.log.Info("worker started")
+	w.process()
 }

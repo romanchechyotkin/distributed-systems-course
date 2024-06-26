@@ -30,4 +30,5 @@ type GiveTaskResponse struct {
 	Map        bool
 	Reduce     bool
 	Files      []string
+	NReduce    int64
 }

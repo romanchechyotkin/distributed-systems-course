@@ -15,10 +15,10 @@ type KeyValue struct {
 
 // use ihash(key) % NReduce to choose the reduce
 // task number for each KeyValue emitted by Map.
-func ihash(key string) int {
+func ihash(key string) int64 {
 	h := fnv.New32a()
 	h.Write([]byte(key))
-	return int(h.Sum32() & 0x7fffffff)
+	return int64(h.Sum32() & 0x7fffffff)
 }
 
 // main/mrworker.go calls this function.
