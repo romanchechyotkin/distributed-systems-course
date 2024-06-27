@@ -29,6 +29,6 @@ type GiveTaskResponse struct {
 	WorkerName string
 	Map        bool
 	Reduce     bool
-	Files      []string
+	File       string
 	NReduce    int64
 }

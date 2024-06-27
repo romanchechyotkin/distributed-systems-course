@@ -79,20 +79,29 @@ func (c *Coordinator) Handshake(req *rpcArgs.HandshakeRequest, res *rpcArgs.Hand
 }
 
 func (c *Coordinator) GiveTask(req *rpcArgs.GiveTaskRequest, res *rpcArgs.GiveTaskResponse) error {
-	//log.Println("[coordinator]: give task; worker:", req.WorkerName)
+	c.log.Info("got task request", slog.String("worker", req.WorkerName))
 
 	if len(c.inputFiles) > 0 {
 		res.WorkerName = req.WorkerName
 		res.Map = true
 		res.Reduce = false
-		res.Files = c.inputFiles
+		res.File = c.inputFiles[0]
 		res.NReduce = c.nReduce
+
+		c.inputFiles = c.inputFiles[1:]
 	}
+
+	c.log.Debug("coordinator input files",
+		slog.Int("length", len(c.inputFiles)),
+		slog.Any("files", c.inputFiles),
+	)
 
 	return nil
 }
 
-func (c *Coordinator) Map() {}
+func (c *Coordinator) Map(filename string) {
+
+}
 
 func (c *Coordinator) Reduce() {}
 
