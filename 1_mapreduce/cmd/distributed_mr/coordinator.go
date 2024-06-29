@@ -1,13 +1,19 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/rpc"
 	"os"
+	"os/signal"
+	"slices"
 	"strconv"
 	"sync"
+	"syscall"
+	"time"
 
 	"distributed-systems/1_mapreduce/cmd/distributed_mr/logger"
 	rpcArgs "distributed-systems/1_mapreduce/cmd/distributed_mr/rpc"
@@ -55,9 +61,10 @@ func (c *Coordinator) serve() {
 // Each mapper should create nReduce intermediate files for consumption by the reduce tasks.
 func newCoordinator(log *slog.Logger, files []string, nReduce int64) *Coordinator {
 	coordinator := &Coordinator{
-		inputFiles: files,
-		nReduce:    nReduce,
-		log:        log,
+		inputFiles:        files,
+		intermediateFiles: make([]string, 0, len(files)),
+		nReduce:           nReduce,
+		log:               log,
 	}
 
 	coordinator.log.Debug("input files", slog.Int("length", len(files)))
@@ -66,7 +73,7 @@ func newCoordinator(log *slog.Logger, files []string, nReduce int64) *Coordinato
 		slog.Int64("reduce num", coordinator.nReduce),
 	)
 
-	// todo
+	go coordinator.serve()
 
 	return coordinator
 }
@@ -81,7 +88,14 @@ func (c *Coordinator) Handshake(req *rpcArgs.HandshakeRequest, res *rpcArgs.Hand
 func (c *Coordinator) GiveTask(req *rpcArgs.GiveTaskRequest, res *rpcArgs.GiveTaskResponse) error {
 	c.log.Info("got task request", slog.String("worker", req.WorkerName))
 
-	if len(c.inputFiles) > 0 {
+	// todo think about recovery files
+
+	c.log.Debug("coordinator",
+		slog.Int("input files length", len(c.inputFiles)),
+		slog.Int("intermediate files length", len(c.intermediateFiles)),
+	)
+
+	if len(c.inputFiles) != 0 {
 		res.WorkerName = req.WorkerName
 		res.Map = true
 		res.Reduce = false
@@ -89,14 +103,69 @@ func (c *Coordinator) GiveTask(req *rpcArgs.GiveTaskRequest, res *rpcArgs.GiveTa
 		res.NReduce = c.nReduce
 
 		c.inputFiles = c.inputFiles[1:]
+
+		return nil
 	}
 
-	c.log.Debug("coordinator input files",
-		slog.Int("length", len(c.inputFiles)),
-		slog.Any("files", c.inputFiles),
-	)
+	if len(c.intermediateFiles) != 0 {
+		res.WorkerName = req.WorkerName
+		res.Map = false
+		res.Reduce = true
+		res.File = c.intermediateFiles[0]
+		res.NReduce = c.nReduce
+
+		c.intermediateFiles = c.intermediateFiles[1:]
+
+		return nil
+	}
 
 	return nil
+}
+
+func (c *Coordinator) process(ctx context.Context) {
+	intermediateFilesTicker := time.NewTicker(10 * time.Second)
+
+	for {
+		select {
+		case <-ctx.Done():
+			c.log.Info("coordinator stopped")
+			return
+
+		case <-intermediateFilesTicker.C:
+			c.processIntermediateFiles()
+		}
+	}
+}
+
+func (c *Coordinator) processIntermediateFiles() {
+	const intermediateDir = "intermediate"
+
+	dir, err := os.ReadDir(intermediateDir)
+	if err != nil {
+		c.log.Error("failed to read dir", slog.String("dirname", intermediateDir), slog.Any("error", err))
+		return
+	}
+
+	if len(dir) == 0 {
+		c.log.Info("intermediate dir is empty")
+		c.intermediateFiles = []string{}
+		return
+	}
+
+	for _, file := range dir {
+		fileName := fmt.Sprintf("%s/%s", intermediateDir, file.Name())
+
+		if slices.Contains(c.intermediateFiles, fileName) {
+			continue
+		}
+
+		c.intermediateFiles = append(c.intermediateFiles, fileName)
+	}
+
+	c.log.Debug("coordinator intermediate files",
+		slog.Int("length", len(c.intermediateFiles)),
+		slog.Any("files", c.intermediateFiles),
+	)
 }
 
 func (c *Coordinator) Map(filename string) {
@@ -122,6 +191,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		log.Debug("waiting for signal")
+		<-sig
+
+		log.Info("shutting down")
+		cancel()
+	}()
+
 	coordinator := newCoordinator(log, os.Args[1:len(os.Args)-1], nReduce)
-	coordinator.serve()
+	coordinator.process(ctx)
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"hash/fnv"
@@ -8,7 +9,9 @@ import (
 	"net/rpc"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -92,25 +95,39 @@ func (w *worker) process(ctx context.Context) {
 			if taskResponse.Map {
 				w.log.Debug("MAP FUNC")
 				if err = w.processMap(taskResponse.File); err != nil {
-					w.log.Error("failed to map file content", slog.Any("error", err))
+					w.log.Error("failed to map file content", slog.String("filename", taskResponse.File), slog.Any("error", err))
 				}
 			}
 
 			if taskResponse.Reduce {
 				w.log.Debug("REDUCE FUNC")
+				if err = w.processReduce(taskResponse.File); err != nil {
+					w.log.Error("failed to reduce file content", slog.String("filename", taskResponse.File), slog.Any("error", err))
+				}
 			}
 		}
 	}
 }
 
 func (w *worker) processMap(file string) error {
+	const intermediateDir = "intermediate"
+
+	err := utils.CreateDir(intermediateDir)
+	if err != nil {
+		w.log.Error("failed to create dir", slog.Any("error", err))
+		return err
+	}
+
 	fileContent, err := os.ReadFile(file)
 	if err != nil {
 		w.log.Error("failed to read file", slog.Any("error", err))
 		return err
 	}
 
-	w.log.Debug("file content", slog.Int("length", len(fileContent)))
+	w.log.Debug("file content",
+		slog.String("filename", file),
+		slog.Int("length", len(fileContent)),
+	)
 
 	keyValues := w.mapf(string(fileContent))
 
@@ -120,7 +137,7 @@ func (w *worker) processMap(file string) error {
 	)
 
 	file = strings.Split(file, "/")[1]
-	fileName := fmt.Sprintf("intermediate/%s", file)
+	fileName := fmt.Sprintf("%s/%s", intermediateDir, file)
 
 	openFile, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -139,8 +156,61 @@ func (w *worker) processMap(file string) error {
 	return nil
 }
 
-func (w *worker) processReduce() {
+func (w *worker) processReduce(file string) error {
+	const outputDir = "output"
 
+	err := utils.CreateDir(outputDir)
+	if err != nil {
+		w.log.Error("failed to create dir", slog.Any("error", err))
+		return err
+	}
+
+	fileName := strings.Split(file, "/")[1]
+
+	openFile, err := os.Open(file)
+	if err != nil {
+		w.log.Error("failed to read file", slog.Any("error", err))
+		return err
+	}
+
+	var keyValues []types.KeyValue
+	scanner := bufio.NewScanner(openFile)
+
+	for scanner.Scan() {
+		line := strings.Split(scanner.Text(), string('\t'))
+		keyValues = append(keyValues, types.KeyValue{Key: line[0], Value: line[1]})
+	}
+
+	sort.Sort(types.ByKey(keyValues))
+
+	//                        |
+	// [ {A 1} {A 1} {A 1} {THE 1} {THE 1} {AS 1} {wqe 1} {nbm 1} ]
+	//    0 	 1 		2 	  3		 4 						7
+
+	var outputFile string
+
+	for i := 0; i < len(keyValues); {
+		j := i + 1
+
+		for j < len(keyValues) && keyValues[i].Key == keyValues[j].Key {
+			j++
+		}
+
+		var values []string
+		for k := i; k < j; k++ {
+			values = append(values, keyValues[k].Value)
+		}
+
+		outputFile = fmt.Sprintf("%s/%s", outputDir, fileName)
+		ofile, _ := os.OpenFile(outputFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+
+		output := w.reducef(keyValues[i].Key, values)
+		fmt.Fprintf(ofile, "%v %v\n", keyValues[i].Key, output)
+
+		i = j
+	}
+
+	return nil
 }
 
 func (w *worker) handshake() {
@@ -230,31 +300,63 @@ func main() {
 		log.Debug("waiting for signal")
 		<-sig
 
+		log.Info("shutting down")
+		cancel()
+
 		if err := cleanup(); err != nil {
 			log.Error("failed to cleanup dir", slog.String("dir", "intermediate"), slog.Any("error", err))
 			return
 		}
-
-		log.Info("shutting down")
-		cancel()
 	}()
 
 	w.process(ctx)
 }
 
 func cleanup() error {
-	dir, err := os.ReadDir("intermediate")
+	const intermediateDir = "intermediate"
+	const outputDir = "output"
+
+	var wg sync.WaitGroup
+
+	intermediate, err := os.ReadDir(intermediateDir)
 	if err != nil {
 		return err
 	}
 
-	for _, file := range dir {
-		fileName := fmt.Sprintf("intermediate/%s", file.Name())
-		err = os.Remove(fileName)
-		if err != nil {
-			continue
-		}
+	for _, file := range intermediate {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			fileName := fmt.Sprintf("%s/%s", intermediateDir, file.Name())
+			err = os.Remove(fileName)
+			if err != nil {
+				return
+			}
+		}()
 	}
+
+	output, err := os.ReadDir(outputDir)
+	if err != nil {
+		return err
+	}
+
+	for _, file := range output {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			fileName := fmt.Sprintf("%s/%s", outputDir, file.Name())
+			err = os.Remove(fileName)
+			if err != nil {
+				return
+			}
+		}()
+	}
+
+	wg.Wait()
 
 	return nil
 }
