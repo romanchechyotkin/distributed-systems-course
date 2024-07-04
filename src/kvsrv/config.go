@@ -1,21 +1,22 @@
 package kvsrv
 
-import "6.5840/labrpc"
-import "testing"
-import "os"
+import (
+	crand "crypto/rand"
+	"encoding/base64"
+	"fmt"
+	"math/big"
+	"math/rand"
+	"os"
+	"runtime"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
 
-//import "log"
-import crand "crypto/rand"
-import "math/big"
-import "math/rand"
-import "encoding/base64"
-import "sync"
-import "runtime"
-import "fmt"
-import "time"
-import "sync/atomic"
+	"6.5840/labrpc"
+)
 
-const SERVERID = 0
+const ServerID = 0
 
 func randstring(n int) string {
 	b := make([]byte, 2*n)
@@ -68,7 +69,7 @@ func (cfg *config) makeClient() *Clerk {
 	// a fresh ClientEnds
 	endname := randstring(20)
 	end := cfg.net.MakeEnd(endname)
-	cfg.net.Connect(endname, SERVERID)
+	cfg.net.Connect(endname, ServerID)
 
 	ck := MakeClerk(end)
 	cfg.clerks[ck] = endname
@@ -125,7 +126,7 @@ func make_config(t *testing.T, unreliable bool) *config {
 	cfg.t = t
 	cfg.net = labrpc.MakeNetwork()
 	cfg.clerks = make(map[*Clerk]string)
-	cfg.nextClientId = SERVERID + 1
+	cfg.nextClientId = ServerID + 1
 	cfg.start = time.Now()
 
 	cfg.StartServer()

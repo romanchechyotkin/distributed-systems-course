@@ -1,9 +1,6 @@
 package kvsrv
 
 import (
-	"6.5840/models"
-	"6.5840/porcupine"
-
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -14,6 +11,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"6.5840/models"
+	"6.5840/porcupine"
 )
 
 const linearizabilityCheckTimeout = 1 * time.Second
