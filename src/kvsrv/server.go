@@ -17,7 +17,7 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 type KVServer struct {
 	mu sync.Mutex
 
-	store map[string][]string
+	store map[string]string
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
@@ -27,7 +27,7 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	defer kv.mu.Unlock()
 
 	if value, ok := kv.store[key]; ok {
-		reply.Value = value[len(value)-1]
+		reply.Value = value
 	} else {
 		reply.Value = ""
 	}
@@ -38,7 +38,7 @@ func (kv *KVServer) Put(args *PutAppendArgs, reply *PutAppendReply) {
 	argsValue := args.Value
 
 	kv.mu.Lock()
-	kv.store[argsKey] = append(kv.store[argsKey], argsValue)
+	kv.store[argsKey] = argsValue
 	kv.mu.Unlock()
 
 	reply.Value = argsValue
@@ -53,14 +53,14 @@ func (kv *KVServer) Append(args *PutAppendArgs, reply *PutAppendReply) {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	if _, ok := kv.store[argsKey]; ok {
-		reply.Value = kv.store[argsKey][len(kv.store)-1]
-		kv.store[argsKey] = append(kv.store[argsKey], argsValue)
+	if value, ok := kv.store[argsKey]; ok {
+		reply.Value = value
+		kv.store[argsKey] += argsValue
 
 		//kv.store[argsKey] = argsValue
 	} else {
 		reply.Value = ""
-		kv.store[argsKey] = append(kv.store[argsKey], argsValue)
+		kv.store[argsKey] = argsValue
 
 		//kv.store[argsKey] = argsValue
 	}
@@ -70,7 +70,7 @@ func (kv *KVServer) Append(args *PutAppendArgs, reply *PutAppendReply) {
 
 func StartKVServer() *KVServer {
 	kv := &KVServer{
-		store: make(map[string][]string),
+		store: make(map[string]string),
 	}
 
 	return kv
