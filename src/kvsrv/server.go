@@ -42,8 +42,6 @@ func (kv *KVServer) Put(args *PutAppendArgs, reply *PutAppendReply) {
 	kv.mu.Unlock()
 
 	reply.Value = argsValue
-
-	log.Println(kv.store)
 }
 
 func (kv *KVServer) Append(args *PutAppendArgs, reply *PutAppendReply) {
@@ -56,16 +54,10 @@ func (kv *KVServer) Append(args *PutAppendArgs, reply *PutAppendReply) {
 	if value, ok := kv.store[argsKey]; ok {
 		reply.Value = value
 		kv.store[argsKey] += argsValue
-
-		//kv.store[argsKey] = argsValue
 	} else {
 		reply.Value = ""
 		kv.store[argsKey] = argsValue
-
-		//kv.store[argsKey] = argsValue
 	}
-
-	log.Println(kv.store)
 }
 
 func StartKVServer() *KVServer {
