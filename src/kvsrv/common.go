@@ -5,10 +5,7 @@ type PutAppendArgs struct {
 	Key   string
 	Value string
 
-	// TODO
-	// You'll have to add definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
+	UniqueName string
 }
 
 // PutAppendReply reply args for Put or Append methods
@@ -20,8 +17,7 @@ type PutAppendReply struct {
 type GetArgs struct {
 	Key string
 
-	// TODO
-	// You'll have to add definitions here.
+	UniqueName string
 }
 
 // GetReply reply args for Get method

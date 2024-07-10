@@ -1,45 +1,34 @@
 package kvsrv
 
 import (
-	"log"
 	"sync"
 )
 
-const Debug = false
-
-func DPrintf(format string, a ...interface{}) (n int, err error) {
-	if Debug {
-		log.Printf(format, a...)
-	}
-	return
-}
-
 type KVServer struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 
-	store map[string]string
+	store      map[string]string
+	duplicates map[string]struct{}
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	key := args.Key
 
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
-
-	if value, ok := kv.store[key]; ok {
-		reply.Value = value
-	} else {
-		reply.Value = ""
-	}
+	reply.Value = kv.get(key)
 }
 
 func (kv *KVServer) Put(args *PutAppendArgs, reply *PutAppendReply) {
 	argsKey := args.Key
 	argsValue := args.Value
+	unique := args.UniqueName
 
-	kv.mu.Lock()
-	kv.store[argsKey] = argsValue
-	kv.mu.Unlock()
+	if _, ok := kv.readDuplicate(unique); !ok {
+		kv.writeDuplicate(unique)
+	} else {
+		return
+	}
+
+	kv.put(argsKey, argsValue)
 
 	reply.Value = argsValue
 }
@@ -47,23 +36,68 @@ func (kv *KVServer) Put(args *PutAppendArgs, reply *PutAppendReply) {
 func (kv *KVServer) Append(args *PutAppendArgs, reply *PutAppendReply) {
 	argsKey := args.Key
 	argsValue := args.Value
+	unique := args.UniqueName
 
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
-
-	if value, ok := kv.store[argsKey]; ok {
-		reply.Value = value
-		kv.store[argsKey] += argsValue
+	if _, ok := kv.readDuplicate(unique); !ok {
+		kv.writeDuplicate(unique)
 	} else {
-		reply.Value = ""
-		kv.store[argsKey] = argsValue
+		return
 	}
+
+	reply.Value = kv.append(argsKey, argsValue)
 }
 
 func StartKVServer() *KVServer {
 	kv := &KVServer{
-		store: make(map[string]string),
+		store:      make(map[string]string),
+		duplicates: make(map[string]struct{}),
 	}
 
 	return kv
+}
+
+func (kv *KVServer) readDuplicate(key string) (val struct{}, ok bool) {
+	kv.mu.RLock()
+	defer kv.mu.RUnlock()
+
+	val, ok = kv.duplicates[key]
+	return val, ok
+}
+
+func (kv *KVServer) writeDuplicate(key string) {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	kv.duplicates[key] = struct{}{}
+}
+
+func (kv *KVServer) put(key, value string) {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	kv.store[key] = value
+}
+
+func (kv *KVServer) append(key, value string) string {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	if val, ok := kv.store[key]; ok {
+		kv.store[key] += value
+		return val
+	} else {
+		kv.store[key] = value
+		return ""
+	}
+}
+
+func (kv *KVServer) get(key string) string {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	if value, ok := kv.store[key]; ok {
+		return value
+	} else {
+		return ""
+	}
 }
