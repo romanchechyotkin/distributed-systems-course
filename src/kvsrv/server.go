@@ -13,6 +13,13 @@ type KVServer struct {
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	key := args.Key
+	unique := args.UniqueName
+
+	if _, ok := kv.readDuplicate(unique); !ok {
+		kv.writeDuplicate(unique)
+	} else {
+		return
+	}
 
 	reply.Value = kv.get(key)
 }
@@ -92,8 +99,8 @@ func (kv *KVServer) append(key, value string) string {
 }
 
 func (kv *KVServer) get(key string) string {
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
+	kv.mu.RLock()
+	defer kv.mu.RUnlock()
 
 	if value, ok := kv.store[key]; ok {
 		return value
