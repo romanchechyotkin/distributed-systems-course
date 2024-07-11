@@ -7,19 +7,11 @@ import (
 type KVServer struct {
 	mu sync.RWMutex
 
-	store      map[string]string
-	duplicates map[string]struct{}
+	store map[string]string
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	key := args.Key
-	unique := args.UniqueName
-
-	if _, ok := kv.readDuplicate(unique); !ok {
-		kv.writeDuplicate(unique)
-	} else {
-		return
-	}
 
 	reply.Value = kv.get(key)
 }
@@ -27,13 +19,6 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 func (kv *KVServer) Put(args *PutAppendArgs, reply *PutAppendReply) {
 	argsKey := args.Key
 	argsValue := args.Value
-	unique := args.UniqueName
-
-	if _, ok := kv.readDuplicate(unique); !ok {
-		kv.writeDuplicate(unique)
-	} else {
-		return
-	}
 
 	kv.put(argsKey, argsValue)
 
@@ -43,39 +28,16 @@ func (kv *KVServer) Put(args *PutAppendArgs, reply *PutAppendReply) {
 func (kv *KVServer) Append(args *PutAppendArgs, reply *PutAppendReply) {
 	argsKey := args.Key
 	argsValue := args.Value
-	unique := args.UniqueName
-
-	if _, ok := kv.readDuplicate(unique); !ok {
-		kv.writeDuplicate(unique)
-	} else {
-		return
-	}
 
 	reply.Value = kv.append(argsKey, argsValue)
 }
 
 func StartKVServer() *KVServer {
 	kv := &KVServer{
-		store:      make(map[string]string),
-		duplicates: make(map[string]struct{}),
+		store: make(map[string]string),
 	}
 
 	return kv
-}
-
-func (kv *KVServer) readDuplicate(key string) (val struct{}, ok bool) {
-	kv.mu.RLock()
-	defer kv.mu.RUnlock()
-
-	val, ok = kv.duplicates[key]
-	return val, ok
-}
-
-func (kv *KVServer) writeDuplicate(key string) {
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
-
-	kv.duplicates[key] = struct{}{}
 }
 
 func (kv *KVServer) put(key, value string) {

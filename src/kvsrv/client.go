@@ -4,6 +4,7 @@ import (
 	"fmt"
 	mrand "math/rand"
 	"strconv"
+	"sync"
 	"time"
 
 	"6.5840/labrpc"
@@ -11,45 +12,16 @@ import (
 
 type Clerk struct {
 	server *labrpc.ClientEnd
+	mu     sync.Mutex
 
-	getFailChan    chan *GetArgs
-	putFailChan    chan *PutAppendArgs
-	appendFailChan chan *PutAppendArgs
+	uniqueName string
 }
 
 func MakeClerk(server *labrpc.ClientEnd) *Clerk {
 	ck := &Clerk{
-		server:         server,
-		getFailChan:    make(chan *GetArgs),
-		putFailChan:    make(chan *PutAppendArgs),
-		appendFailChan: make(chan *PutAppendArgs),
+		server:     server,
+		uniqueName: uniqueName(),
 	}
-
-	go func() {
-		for {
-			select {
-			case arg, ok := <-ck.getFailChan:
-				if ok {
-					continue
-				}
-
-				ck.Get(arg.Key)
-			case arg, ok := <-ck.putFailChan:
-				if ok {
-					continue
-				}
-
-				ck.Put(arg.Key, arg.Value)
-
-			case arg, ok := <-ck.appendFailChan:
-				if ok {
-					continue
-				}
-
-				ck.Append(arg.Key, arg.Value)
-			}
-		}
-	}()
 
 	return ck
 }
@@ -66,7 +38,7 @@ func MakeClerk(server *labrpc.ClientEnd) *Clerk {
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) Get(key string) string {
 	reply := &GetReply{}
-	arg := &GetArgs{Key: key, UniqueName: uniqueName()}
+	arg := &GetArgs{Key: key, UniqueName: ck.uniqueName}
 
 	if ok := ck.server.Call("KVServer.Get",
 		arg,
@@ -95,18 +67,12 @@ func (ck *Clerk) PutAppend(key string, value string, op string) string {
 	arg := &PutAppendArgs{
 		Key:        key,
 		Value:      value,
-		UniqueName: uniqueName(),
+		UniqueName: ck.uniqueName,
 	}
 
 	reply := &PutAppendReply{}
 
 	if ok := ck.server.Call(method, arg, reply); !ok {
-		//if op == "Append" {
-		//	ck.appendFailChan <- arg
-		//} else {
-		//	ck.putFailChan <- arg
-		//}
-
 		ck.server.Call(method, arg, reply)
 	}
 
