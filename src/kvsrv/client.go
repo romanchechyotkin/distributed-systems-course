@@ -5,22 +5,25 @@ import (
 	mrand "math/rand"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"6.5840/labrpc"
 )
 
+// Clerk is RPC client
 type Clerk struct {
+	id        int64
+	reqNumber uint64
+
 	server *labrpc.ClientEnd
 	mu     sync.Mutex
-
-	uniqueName string
 }
 
 func MakeClerk(server *labrpc.ClientEnd) *Clerk {
 	ck := &Clerk{
-		server:     server,
-		uniqueName: uniqueName(),
+		server: server,
+		id:     atomic.AddInt64(&clientID, 1),
 	}
 
 	return ck
@@ -37,20 +40,27 @@ func MakeClerk(server *labrpc.ClientEnd) *Clerk {
 // must match the declared types of the RPC handler function's
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) Get(key string) string {
-	reply := &GetReply{}
-	arg := &GetArgs{Key: key, UniqueName: ck.uniqueName}
+	reqNumber := atomic.AddUint64(&ck.reqNumber, 1)
+	ck.reqNumber = reqNumber
 
-	if ok := ck.server.Call("KVServer.Get",
-		arg,
-		reply,
-	); !ok {
-		ck.server.Call("KVServer.Get",
+	arg := &GetArgs{
+		Key:       key,
+		ClerkID:   ck.id,
+		ReqNumber: reqNumber,
+	}
+	reply := &GetReply{}
+
+	fmt.Printf("client %d; request number %d; GET key %s\n", ck.id, reqNumber, key)
+
+	for {
+		ok := ck.server.Call("KVServer.Get",
 			arg,
 			reply,
 		)
+		if ok && (reply.Error == ErrNoKey || reply.Error == OK) {
+			return reply.Value
+		}
 	}
-
-	return reply.Value
 }
 
 // PutAppend shared by Put and Append.
@@ -63,20 +73,29 @@ func (ck *Clerk) Get(key string) string {
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) PutAppend(key string, value string, op string) string {
 	method := fmt.Sprintf("KVServer.%s", op)
+	reqNumber := atomic.AddUint64(&ck.reqNumber, 1)
+	ck.reqNumber = reqNumber
 
 	arg := &PutAppendArgs{
-		Key:        key,
-		Value:      value,
-		UniqueName: ck.uniqueName,
+		Key:       key,
+		Value:     value,
+		ClerkID:   ck.id,
+		Op:        op,
+		ReqNumber: reqNumber,
 	}
-
 	reply := &PutAppendReply{}
 
-	if ok := ck.server.Call(method, arg, reply); !ok {
-		ck.server.Call(method, arg, reply)
-	}
+	fmt.Printf("client %d; request number %d; %s key [%s] value [%s]\n", ck.id, reqNumber, op, key, value)
 
-	return reply.Value
+	for {
+		ok := ck.server.Call(method,
+			arg,
+			reply,
+		)
+		if ok && (reply.Error == ErrNoKey || reply.Error == OK) {
+			return reply.Value
+		}
+	}
 }
 
 func (ck *Clerk) Put(key string, value string) {
